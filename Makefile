@@ -1,11 +1,11 @@
 #
-# Kelechi Igwe (kigwe)
+# Kelechi Igwe (kigwe) and Austin Ng (ang24)
 #
 # This is the Makefile for Lab 3B, "Implement Matrix Addition using pthreads".
 #
 
 CC = gcc
-CFLAGS = -Wall -pedantic
+CFLAGS = -Wall -pedantic -fopenmp
 LD = gcc
 LDFLAGS =
 
@@ -18,4 +18,4 @@ clean:
 	@rm -f $(MAIN)
 
 $(MAIN): $(SRCS)
-	@$(CC) $(CFLAGS) -g -o $(MAIN) $(SRCS) -pthread 
+	@$(CC) $(CFLAGS) -g -o $(MAIN) $(SRCS) -pthread
