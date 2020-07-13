@@ -15,7 +15,7 @@ SRCS = main.c matrix_add.c
 all: $(MAIN)
 
 clean:
-	@rm -f $(MAIN)
+	rm -f $(MAIN)
 
 $(MAIN): $(SRCS)
 	@$(CC) $(CFLAGS) -g -o $(MAIN) $(SRCS) -pthread

@@ -8,6 +8,7 @@ static int a[MATRIX_SIZE]; /* First matrix (Matrix A) */
 static int b[MATRIX_SIZE]; /* Second matrix (Matrix B) */
 static int res[MATRIX_SIZE]; /* Resulting matrix (Matrix A + B) */
 
+
 void build_matrices() {
     /* Using the buffers that have already been initialized above (a[] and
      * b[]), fill up each array with random numbers using rand() function
@@ -16,10 +17,11 @@ void build_matrices() {
     int i;
 
     for (i = 0; i < MATRIX_SIZE; i++) {
-	a[i] = 1 * i;
-	b[i] = 2 * i;
+	a[i] = i;
+	b[i] = i * 2;
     } 
 }
+
 
 void* matrix_addition(void* ops) {
     /* Using the buffers that have been filled by the build_matrices()
@@ -27,16 +29,42 @@ void* matrix_addition(void* ops) {
      * of matrix a[] and b[]
      */
 
-    int i;
-    int add_ops;
+    int start, end; /* Start and end index values for matrices */
+    int add_ops; /* Number of add operations each thread must perform */
+    int rem; /* Number of add operations not assigned to thread yet */
 
-    i = *((int*) ops); /* Convert void* to int */
     add_ops = MATRIX_SIZE / NUM_THREADS;
+    start = *((int*) ops); /* Convert void* to int */
+    end = start + add_ops;
+    rem = MATRIX_SIZE - (NUM_THREADS * add_ops);
 
-    while (i < (i + add_ops)) {
-	res[i] = a[i] + b[i];
-	i++;
+    if (start == ((NUM_THREADS - 1) * add_ops)) {
+	/* If last thread */
+	if (rem > 0) {
+	    /* Force last thread to execute remaining add operations */
+	    end += rem;
+	}
+    }
+
+    while (start < end) {
+	res[start] = a[start] + b[start];
+	start++;
     }
 
     pthread_exit(0);
+}
+
+
+void print_matrices() {
+    /* Extra function used to print the results of the matrix addition.
+     * (Note: Printed in the form - A[n] | B[n] | RESULT[n])
+     */
+
+    int i;
+
+    printf("A | B | RESULT\n");
+
+    for (i = 0; i < MATRIX_SIZE; i++) {
+	printf("%d | %d | %d\n", a[i], b[i], res[i]);
+    }
 }
