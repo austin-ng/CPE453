@@ -1,7 +1,7 @@
 #ifndef SORT_H
 #define SORT_H
 
-#define ARR_SIZE 100
+#define ARR_SIZE 3000000
 
 extern int arr[ARR_SIZE];
 
