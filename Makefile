@@ -18,4 +18,4 @@ clean:
 	rm -f $(MAIN)
 
 $(MAIN): $(SRCS)
-	@$(CC) $(CFLAGS) -g -o $(MAIN) $(SRCS) -pthread
+	@$(CC) $(CFLAGS) -o $(MAIN) $(SRCS) -pthread

@@ -62,7 +62,7 @@ void print_matrices() {
 
     int i;
 
-    printf("A | B | RESULT\n");
+    printf("\nA | B | RESULT\n");
 
     for (i = 0; i < MATRIX_SIZE; i++) {
 	printf("%d | %d | %d\n", a[i], b[i], res[i]);

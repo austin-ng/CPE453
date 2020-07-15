@@ -1,3 +1,4 @@
+#include <time.h>
 #include <omp.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -9,9 +10,14 @@
 
 int main(int argc, char* argv[]) {
     int i;
-    int run_method;
-    int start_point;
+    int run_method; /* Flag for implementation to use (0: par, 1: seq) */
+    int start_point; /* Index of where a thread should start add operations */
+    pthread_t* tids; /* List of tids */
+    pthread_attr_t* attrs; /* List of each tid's corresponding attributes */
+    struct timespec start, finish;
+    double elapsed;
 
+    /* Check command line arguments */
     if (argc != 2) {
 	fprintf(stderr, "usage: ./matrix_add method\n");
 	fprintf(stderr, "(possible methods: seq, par)\n");
@@ -28,24 +34,28 @@ int main(int argc, char* argv[]) {
 	fprintf(stderr, "(possible methods: seq, par)\n");
 	exit(EXIT_FAILURE);
     }
+ 
+    build_matrices(); /* Populate matrices A and B */
 
-    build_matrices(); /* Populate matrices A and B */ 
+    tids = malloc(NUM_THREADS * sizeof(pthread_t));
+    attrs = malloc(NUM_THREADS * sizeof(pthread_attr_t));
+
+    clock_gettime(CLOCK_MONOTONIC, &start); /* Get start time */
 
     if (run_method == PARALLEL) {
 	#pragma omp parallel
 	{
-    	for (i = 0; i < NUM_THREADS; i++) {
-	    /* Create and execute each thread */
-	    pthread_t tid; /* Thread id */
-            pthread_attr_t attr; /* Set of thread attributes */
-            pthread_attr_init(&attr); /* Get default attributes */
+    	    for (i = 0; i < NUM_THREADS; i++) {
+	        /* Create and execute each thread */
+		pthread_attr_init(&attrs[i]);
 
-	    start_point = i * (MATRIX_SIZE / NUM_THREADS);
-
-	    /* Create and wait for thread to complete/exit */
-            pthread_create(&tid, &attr, matrix_addition, &start_point);
-            pthread_join(tid, NULL);
+	    	start_point = i * (MATRIX_SIZE / NUM_THREADS);
+            	pthread_create(&tids[i], NULL, matrix_addition, &start_point);
+	    }
 	}
+
+	for (i = 0; i < NUM_THREADS; i++) {
+	    pthread_join(tids[i], NULL);
 	}
     }
     else {
@@ -56,13 +66,24 @@ int main(int argc, char* argv[]) {
 	    pthread_attr_init(&attr);
 
 	    start_point = i * (MATRIX_SIZE / NUM_THREADS);
-
-            pthread_create(&tid, &attr, matrix_addition, &start_point);
-            pthread_join(tid, NULL);
+	    pthread_create(&tid, &attr, matrix_addition, &start_point);
+	    pthread_join(tid, NULL);
 	}
     }
 
-    print_matrices();
+    clock_gettime(CLOCK_MONOTONIC, &finish); /* Get finish time */
 
+    /* Calculate elapsed time and print it to stdout */
+    elapsed = (finish.tv_sec - start.tv_sec);
+    elapsed += (finish.tv_nsec - start.tv_nsec) / NSEC_IN_SEC;
+    printf("Time Elapsed: %f\n", elapsed);
+
+    /* Uncomment this if you want to print the resulting matrix
+    print_matrices();
+    */
+
+    free(tids);
+    free(attrs);
+    
     return 0;
 }
