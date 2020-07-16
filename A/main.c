@@ -15,6 +15,7 @@ int main(int argc, char* argv[]) {
     FILE *in;
     FILE *out;
     int temp, start, i;
+    pthread_t tid1, tid2, tid3;
     start = 0;
 
     /* open input file and fill arr */
@@ -22,12 +23,6 @@ int main(int argc, char* argv[]) {
     while (fscanf(in, "%d", &temp) == 1) {
         arr[len++] = temp;
     }
-    /* FOR TESTING: print original array */
-    printf("Original array:\n");
-    for (i = start; i < len; i++) {
-        printf("%d ", arr[i]);
-    }
-    printf("\n");
 
     /* assign global variables */
     start1 = arr;
@@ -35,7 +30,6 @@ int main(int argc, char* argv[]) {
     len1 = len / 2;
     len2 = len - len / 2;
 
-    pthread_t tid1, tid2, tid3;
     /* create two sorting threads for each half */
     pthread_create(&tid1, NULL, sortArr1, &len);
     pthread_create(&tid2, NULL, sortArr2, &len);
