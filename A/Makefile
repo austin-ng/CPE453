@@ -9,7 +9,7 @@ CFLAGS = -Wall -pedantic
 LD = gcc
 LDFLAGS =
 
-MAIN = sort
+MAIN = intsort
 SRCS = main.c sort.c
 
 all: $(MAIN)
