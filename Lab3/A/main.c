@@ -19,8 +19,7 @@ int main(int argc, char* argv[]) {
     pthread_t tid1, tid2, tid3;
     struct timespec start, finish;
     double elapsed;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
+    
     startIndex = 0;
 
     if (argc != 2) {
@@ -45,6 +44,8 @@ int main(int argc, char* argv[]) {
     len1 = len / 2;
     len2 = len - len / 2;
 
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     /* create two sorting threads for each half */
     pthread_create(&tid1, NULL, sortArr1, &len);
     pthread_create(&tid2, NULL, sortArr2, &len);
@@ -57,6 +58,8 @@ int main(int argc, char* argv[]) {
     pthread_create(&tid3, NULL, mergeArrs, &len);
     pthread_join(tid3, NULL);
 
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+
     /* write sorted array to output */
     out = fopen("out.txt", "w");
     for (i = startIndex; i < len; i++) {
@@ -65,11 +68,45 @@ int main(int argc, char* argv[]) {
     fprintf(out, "\n");
     fclose(out);
 
-    /* print time */
-    clock_gettime(CLOCK_MONOTONIC, &finish);
+    /* print time */    
     elapsed = (finish.tv_sec - start.tv_sec);
     elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf("Finished in %f seconds.\n", elapsed);
+    printf("Finished multithreading in %f seconds.\n", elapsed);
+
+    /* Rebuild unsorted array */
+    len = 0;
+
+    in = fopen(argv[1], "r");
+    if (!in) {
+        printf("Error: '%s' not found\n", argv[1]);
+        exit(EXIT_FAILURE);
+    }
+
+    while (fscanf(in, "%d", &temp) == 1) {
+        arr[len++] = temp;
+    }
+    fclose(in);
+
+    /* Single thread time */
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    /* create two sorting threads for each half */
+    pthread_create(&tid1, NULL, sortArr1, &len);
+    pthread_join(tid1, NULL);
+    pthread_create(&tid2, NULL, sortArr2, &len);
+    pthread_join(tid2, NULL);
+
+    /* create merging thread, wait for terminate */
+    pthread_create(&tid3, NULL, mergeArrs, &len);
+    pthread_join(tid3, NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+
+    /* print time */    
+    elapsed = (finish.tv_sec - start.tv_sec);
+    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+    printf("Finished single threading in %f seconds.\n", elapsed);
+
 
     return 0;
 }
