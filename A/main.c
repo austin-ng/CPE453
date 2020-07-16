@@ -6,31 +6,56 @@
 #include "sort.h"
 
 int arr[ARR_SIZE];
+int len, len1, len2;
+int res[ARR_SIZE];
+int *start1;
+int *start2;
 
 int main(int argc, char* argv[]) {
-    /* int arr[ARR_SIZE]; */
     FILE *in;
-    int temp, start, end, i;
-    start = end = 0;
+    FILE *out;
+    int temp, start, i;
+    start = 0;
 
+    /* open input file and fill arr */
     in = fopen(argv[1], "r");
-
     while (fscanf(in, "%d", &temp) == 1) {
-        arr[end++] = temp;
+        arr[len++] = temp;
     }
-
+    /* FOR TESTING: print original array */
     printf("Original array:\n");
-    for (i = start; i < end; i++) {
-        printf("%d ", arr[i]);
-    }
-
-    quicksort(start, end - 1);
-    printf("\nSorted array:\n");
-    for (i = start; i < end; i++) {
+    for (i = start; i < len; i++) {
         printf("%d ", arr[i]);
     }
     printf("\n");
 
+    /* assign global variables */
+    start1 = arr;
+    start2 = arr + len / 2;
+    len1 = len / 2;
+    len2 = len - len / 2;
+
+    pthread_t tid1, tid2, tid3;
+    /* create two sorting threads for each half */
+    pthread_create(&tid1, NULL, sortArr1, &len);
+    pthread_create(&tid2, NULL, sortArr2, &len);
+
+    /* wait for sorting threads */
+    pthread_join(tid1, NULL);
+    pthread_join(tid2, NULL);
+
+    /* create merging thread, wait for terminate */
+    pthread_create(&tid3, NULL, mergeArrs, &len);
+    pthread_join(tid3, NULL);
+
+    /* write sorted array to output */
+    out = fopen("out.txt", "w");
+    for (i = start; i < len; i++) {
+        fprintf(out, "%d ", res[i]);
+    }
+    fprintf(out, "\n");
+
     return 0;
 }
+
 

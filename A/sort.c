@@ -5,41 +5,51 @@
 
 #include "sort.h"
 
-void swap(int num1, int num2) {
-    int temp = arr[num1];
-    arr[num1] = arr[num2];
-    arr[num2] = temp;
+/* comparator for qsort */
+int cmpfunc(const void *a, const void *b) {
+    return ( *(int*)a - *(int*)b );
 }
 
-int partition(int left, int right, int pivot) {
-    int leftPointer = left - 1;
-    int rightPointer = right;
+/* sort left half */
+void *sortArr1(void *ops) {
+    qsort(start1, len1, sizeof(int), cmpfunc);
+    pthread_exit(0);
+}
 
-    while (1) {
-        while (arr[++leftPointer] < pivot) {
-            /* do nothing */
-        }
-        while (rightPointer > 0 && arr[--rightPointer] > pivot) {
-            /* do nothing */
-        }
-        if (leftPointer >= rightPointer) {
-            break;
+/* sort right half */
+void *sortArr2(void *ops) {
+    qsort(start2, len2, sizeof(int), cmpfunc);
+    pthread_exit(0);
+}
+
+/* merge two sorted arrays */
+void *mergeArrs(void *ops) {
+    int count, left, right, mid;
+    left = count = 0;
+    right = len / 2;
+    mid = right;
+
+    /* add smallest number from each half to res until one is finished */
+    while (left < mid && right < len) {
+        if (arr[left] < arr[right]) {
+            res[count++] = arr[left++];
         } else {
-            swap(leftPointer, rightPointer);
+            res[count++] = arr[right++];
         }
     }
-    swap(leftPointer, right);
-    return leftPointer;
+    /* finish filling res with left if unfinished */
+    while (left < mid) {
+        res[count++] = arr[left++];
+    }
+    /* finish filling res with right if unfinished */
+    while (right < len) {
+        res[count++] = arr[right++];
+    }
+    /* exit merge thread */
+    pthread_exit(0);
 }
 
-void quicksort(int left, int right) {
-    if (right - left <= 0) {
-        return;
-    } else {
-        int pivot = arr[right];
-        int partitionPoint = partition(left, right, pivot);
-        quicksort(left, partitionPoint - 1);
-        quicksort(partitionPoint + 1, right);
-    }
-}
+
+
+
 
