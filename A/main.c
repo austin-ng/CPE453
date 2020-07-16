@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     startIndex = 0;
 
     if (argc != 2) {
-        printf("Usage: ./sort [inputFile]\n");
+        printf("Usage: ./intsort [inputFile]\n");
         exit(EXIT_FAILURE);
     }
     /* open input file and fill arr */
