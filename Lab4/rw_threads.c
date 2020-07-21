@@ -20,7 +20,7 @@ int fds[NUM_READ_THREADS]; /* File descriptors of the input file */
 
 void init_sems() {
     sem_init(&wrt, 0, 1);
-    sem_init(&mutex, 0, 1);
+    sem_init(&mutex, 0, NUM_READ_THREADS);
 }
 
 void save_filename(char* name) {
@@ -40,21 +40,50 @@ void* read_file(void* param) {
     int len; /* Length of read segment (stored in param) */
     char* read_data; /* Buffer for data read from input file */
 
-    len = ((int*) param)[0];
-    i = ((int*) param)[1];
+    sem_wait(&mutex);
 
-    read_data = malloc(len + 1);
-    memset(read_data, '\0', len+1);
+    read_count++;
+    if (read_count == 1) {
+        sem_wait(&wrt);
+    }
 
-    if (read(fds[i], read_data, len) < 0) {
-        perror("read");
+    i = read_count - 1;
+
+    sem_post(&mutex);
+
+    fds[i] = open(filename, O_RDONLY);
+    if (lseek(fds[i], ((int*) param)[0], SEEK_SET) < 0) {
+        perror("lseek");
     }
     else {
-        printf("%s\n", read_data);
+        len = ((int*) param)[1] - ((int*) param)[0];
+        printf("%d\n", len);
         fflush(stdout);
+
+        read_data = malloc(len + 1);
+        memset(read_data, '\0', len+1);
+
+        if (read(fds[i], read_data, len) < 0) {
+            perror("read");
+        }
+        else {
+            printf("%s\n", read_data);
+            fflush(stdout);
+        }
+
+        free(read_data);
     }
 
-    free(read_data);
+    sem_wait(&mutex);
+
+    read_count--;
+    if (read_count == 0) {
+        sem_post(&wrt);
+    }
+    
+    sem_post(&mutex);
+
+    close(fds[i]);
 
     pthread_exit(0);
 }
@@ -68,44 +97,16 @@ void create_read_thread(int start, int end) {
     pthread_attr_t attr;
     int thread_vars[2];
 
-    thread_vars[0] = end - start;
+    thread_vars[0] = start;
+    thread_vars[1] = end;
 
-    if (thread_vars[0] <= 0) {
+    if ((end - start) <= 0) {
         /* If end position is not greater than start position */
         return;
     }
 
-    sem_wait(&mutex);
-
-    read_count++;
-    if (read_count == 1) {
-        sem_wait(&wrt);
-    }
-    sem_post(&mutex);
-
-    fds[read_count-1] = open(filename, O_RDONLY);
-
     pthread_attr_init(&attr);
-
-    /* if (lseek(fds[read_count-1], start, SEEK_SET) < 0) {
-        perror("lseek");
-    }
-    else {*/
-    thread_vars[1] = read_count - 1;
-
     pthread_create(&tid, &attr, read_file, (void*) thread_vars);
-
-    sem_wait(&mutex);
-
-    read_count--;
-    if (read_count == 0) {
-        sem_post(&wrt);
-    }
-    
-    sem_post(&mutex);
-
-    close(fds[read_count]);
-    /*}*/
 }
 
 void* file_write(void* param) {
