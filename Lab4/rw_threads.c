@@ -15,12 +15,12 @@ static int read_count = 0;
 sem_t wrt;
 sem_t mutex;
 char* filename;
-int fd; /* File descriptor of the input file */
+int fds[NUM_READ_THREADS]; /* File descriptors of the input file */
 /*pthread_t tids[NUM_READ_THREADS];*/
 
 void init_sems() {
-    sem_init(&wrt, 0, 5);
-    sem_init(&mutex, 0, NUM_READ_THREADS);
+    sem_init(&wrt, 0, 1);
+    sem_init(&mutex, 0, 1);
 }
 
 void save_filename(char* name) {
@@ -36,14 +36,17 @@ void* read_file(void* param) {
      * that value to read data from the input file
      */
 
+    int i;
     int len; /* Length of read segment (stored in param) */
     char* read_data; /* Buffer for data read from input file */
 
-    len = *((int*) param);
+    len = ((int*) param)[0];
+    i = ((int*) param)[1];
 
-    read_data = malloc(len);
+    read_data = malloc(len + 1);
+    memset(read_data, '\0', len+1);
 
-    if (read(fd, read_data, len) < 0) {
+    if (read(fds[i], read_data, len) < 0) {
         perror("read");
     }
     else {
@@ -52,18 +55,6 @@ void* read_file(void* param) {
     }
 
     free(read_data);
-
-    sem_wait(&mutex);
-    write(STDOUT_FILENO, "progress\n", 9);
-
-    read_count--;
-    if (read_count == 0) {
-        sem_post(&wrt);
-        close(fd);
-        write(STDOUT_FILENO, "progress\n", 9);
-    }
-    sem_post(&mutex);
-    write(STDOUT_FILENO, "progress\n", 9);
 
     pthread_exit(0);
 }
@@ -75,45 +66,46 @@ void create_read_thread(int start, int end) {
     
     pthread_t tid;
     pthread_attr_t attr;
+    int thread_vars[2];
 
-    int thread_var = end - start;
+    thread_vars[0] = end - start;
 
-    if (thread_var <= 0) {
+    if (thread_vars[0] <= 0) {
         /* If end position is not greater than start position */
         return;
     }
 
     sem_wait(&mutex);
-    write(STDOUT_FILENO, "progress\n", 9);
-
-    /* Check if there is a write thread that might/might not be finished */
-
-    /* JUST IN CASE (PLS NO KEEP IF NO NEEDED)
-    if ((thread_count > 0) && (read_count == 0)) {
-        while (thread_count > 0) {
-            if (tids[--thread_count]) {
-                pthread_join(tids[thread_count]);
-            }
-        }
-    } */
 
     read_count++;
     if (read_count == 1) {
         sem_wait(&wrt);
-        write(STDOUT_FILENO, "progress\n", 9);
-        fd = open(filename, O_RDONLY);
     }
     sem_post(&mutex);
-    write(STDOUT_FILENO, "progress\n", 9);
+
+    fds[read_count-1] = open(filename, O_RDONLY);
 
     pthread_attr_init(&attr);
 
-    if (lseek(fd, start, SEEK_SET) < 0) {
+    /* if (lseek(fds[read_count-1], start, SEEK_SET) < 0) {
         perror("lseek");
     }
-    else {
-        pthread_create(&tid, &attr, read_file, &thread_var);
+    else {*/
+    thread_vars[1] = read_count - 1;
+
+    pthread_create(&tid, &attr, read_file, (void*) thread_vars);
+
+    sem_wait(&mutex);
+
+    read_count--;
+    if (read_count == 0) {
+        sem_post(&wrt);
     }
+    
+    sem_post(&mutex);
+
+    close(fds[read_count]);
+    /*}*/
 }
 
 void* file_write(void* param) {

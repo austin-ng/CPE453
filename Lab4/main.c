@@ -30,6 +30,7 @@ int main(int argc, char* argv[]) {
     }
     close(fd);
 
+    init_sems();
     save_filename(argv[1]);
 
     /* Testing Code */
