@@ -15,13 +15,16 @@ static int read_count = 0;
 sem_t wrt;
 sem_t mutex;
 char* filename;
-int fds[NUM_READ_THREADS]; /* File descriptors of the input file */
-/*pthread_t tids[NUM_READ_THREADS];*/
+int fds[NUM_READ_THREADS]; /* Read file descriptors of the input file */
+pthread_t tids[NUM_READ_THREADS];
+int write_fd; /* File descriptor for write */
+
 
 void init_sems() {
     sem_init(&wrt, 0, 1);
-    sem_init(&mutex, 0, NUM_READ_THREADS);
+    sem_init(&mutex, 0, 1);
 }
+
 
 void save_filename(char* name) {
     /* Creates a pointer (filename) that points to the input file name,
@@ -31,13 +34,15 @@ void save_filename(char* name) {
     filename = name;
 }
 
+
 void* read_file(void* param) {
     /* Takes parameters from pthread_create() call (param) and uses
      * that value to read data from the input file
      */
 
     int i;
-    int len; /* Length of read segment (stored in param) */
+    int beg, end;
+    int s_len; /* Length of read segment (stored in param) */
     char* read_data; /* Buffer for data read from input file */
 
     sem_wait(&mutex);
@@ -51,30 +56,28 @@ void* read_file(void* param) {
 
     sem_post(&mutex);
 
+    beg = ((int*) param)[0];
+    end = ((int*) param)[1];
+
     fds[i] = open(filename, O_RDONLY);
-    if (lseek(fds[i], ((int*) param)[0], SEEK_SET) < 0) {
-        perror("lseek");
-    }
-    else {
-        len = ((int*) param)[1] - ((int*) param)[0];
-        printf("%d\n", len);
-        fflush(stdout);
 
-        read_data = malloc(len + 1);
-        memset(read_data, '\0', len+1);
+    lseek(fds[i], beg, SEEK_SET);
 
-        if (read(fds[i], read_data, len) < 0) {
-            perror("read");
-        }
-        else {
-            printf("%s\n", read_data);
-            fflush(stdout);
-        }
+    s_len = end - beg;
 
-        free(read_data);
-    }
+    read_data = malloc(s_len + 1);
+    memset(read_data, '\0', s_len + 1);
+
+    read(fds[i], read_data, s_len);
+
+    printf("%s\n", read_data);
+    fflush(stdout);
+
+    free(read_data);
 
     sem_wait(&mutex);
+
+    close(fds[i]);
 
     read_count--;
     if (read_count == 0) {
@@ -82,20 +85,15 @@ void* read_file(void* param) {
     }
     
     sem_post(&mutex);
-
-    close(fds[i]);
-
-    pthread_exit(0);
 }
+
 
 void create_read_thread(int start, int end) {
     /* Takes a read area (start, end) and creates a new read thread 
      * that reads the file in the specified area
      */
     
-    pthread_t tid;
-    pthread_attr_t attr;
-    int thread_vars[2];
+    int thread_vars[3];
 
     thread_vars[0] = start;
     thread_vars[1] = end;
@@ -105,8 +103,7 @@ void create_read_thread(int start, int end) {
         return;
     }
 
-    pthread_attr_init(&attr);
-    pthread_create(&tid, &attr, read_file, (void*) thread_vars);
+    pthread_create(&tids[read_count], NULL, read_file, (void*) thread_vars);
 }
 
 void* file_write(void* param) {
@@ -129,9 +126,10 @@ void* file_write(void* param) {
 
 }
 
-void create_write_thread() {
+void create_write_thread(char* data) {
     int fd; /* File descriptor for input file */
     pthread_t tid;
     pthread_attr_t attr;
 
+    pthread_create(&tids[read_count], NULL, read_file, (void*) data);
 }
