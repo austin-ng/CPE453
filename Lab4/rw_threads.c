@@ -115,16 +115,22 @@ void* file_write(void* param) {
     int fd;
     char* data;
     data = (char*) param;
-    fd = open(filename, O_WRONLY);
 
+    sem_wait(&wrt);
+
+    /* begin critical section: write to file */
+    fd = open(filename, O_WRONLY);
     if (lseek(fd, 0, SEEK_END) < 0) {
         perror("lseek");
     }
     else if (write(fd, data, strlen(data)) < 0){
         perror("write");
     }
-
     close(fd);
+
+    /* end crticial section */
+    sem_post(&wrt);
+
     return NULL;
 }
 
