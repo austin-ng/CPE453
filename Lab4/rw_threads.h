@@ -8,5 +8,6 @@ void save_filename(char* name);
 void* read_file(void* param);
 void create_read_thread(int start, int end);
 void* file_write(void* param);
+void create_write_thread(char* data);
 
 #endif /* RW_THREADS_H */
