@@ -17,6 +17,7 @@ sem_t mutex;
 char* filename;
 int fds[NUM_READ_THREADS]; /* Read file descriptors of the input file */
 pthread_t tids[NUM_READ_THREADS];
+int write_fd; /* File descriptor for write */
 
 
 void init_sems() {
@@ -92,7 +93,7 @@ void create_read_thread(int start, int end) {
      * that reads the file in the specified area
      */
     
-    int thread_vars[2];
+    int thread_vars[3];
 
     thread_vars[0] = start;
     thread_vars[1] = end;
@@ -103,7 +104,7 @@ void create_read_thread(int start, int end) {
     }
 
     pthread_create(&tids[read_count], NULL, read_file, (void*) thread_vars);
-    pthread_join(tids[read_count]);
+    pthread_join(tids[read_count], NULL);
 }
 
 void* file_write(void* param) {
@@ -111,13 +112,11 @@ void* file_write(void* param) {
      * thread that writes the specified characters (data) to the file
      */
 
-    char* data;
     int fd;
+    char* data;
     data = (char*) param;
-
-    sem_wait(&wrt);
-
     fd = open(filename, O_WRONLY);
+
     if (lseek(fd, 0, SEEK_END) < 0) {
         perror("lseek");
     }
@@ -126,11 +125,13 @@ void* file_write(void* param) {
     }
 
     close(fd);
-    sem_post(&wrt);
     return NULL;
 }
 
+
 void create_write_thread(char* data) {
     pthread_t tid;
-    pthread_create(&tid, NULL, read_file, (void*) data);
+
+    pthread_create(&tid, NULL, file_write, (void*) data);
+    pthread_join(tid, NULL);
 }
