@@ -39,7 +39,9 @@ int main(int argc, char* argv[]) {
     create_read_thread(0, 7);
     create_read_thread(3, 4);
     create_read_thread(4, 8);
+
     create_write_thread("This is the new line\n");
+
     create_read_thread(49, 60);
 
     return 0;
