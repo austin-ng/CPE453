@@ -1,5 +1,5 @@
 #
-# Yvan Gonzalez, Austin Ng, and Kelechi Igwe
+# Yvan Gonzalez (yggonzal), Austin Ng (ang24), and Kelechi Igwe (kigwe)
 #
 # This is the Makefile for Lab 5, "Support for Lightweight Processes".
 #
