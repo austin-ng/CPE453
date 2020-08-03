@@ -83,7 +83,7 @@ thread tid2thread(tid_t tid);
 #if defined (__x86_64)         /* X86 only code */
   #define BAILSIGNAL SIGSTKFLT
   #define GetSP(sp)  asm("movq  %%rsp,%0": "=r" (sp) : )
-  #define SetSP(sp)  asm("movq  %0,%%rsp":           : "r" (sp)  )
+  #define SetSP(sp)  asm("movq  %0,%%rsp":           : "r" (sp))
 #else /* END x86 only code */
   #error "This stack manipulation code can only be compiled on an x86"
 #endif

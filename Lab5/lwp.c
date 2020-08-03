@@ -38,6 +38,8 @@ tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
     sp--;
     SetSP(lwp_exit); /* Return Address */
     sp--;
+    SetSP(fun); /* Function Pointer */
+    sp--;
     SetSP(0xdeadbeef); /* Required fluff */
 
     /* Set Thread ID */
@@ -99,7 +101,6 @@ tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
     }
 
     threads[newthread->tid - 1] = newthread; 
-
     return newthread->tid;
 }
 
