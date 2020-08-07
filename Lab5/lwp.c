@@ -13,6 +13,80 @@ thread cur_thread; /* Current thread being ran by the scheduler */
 scheduler cur_sched; /* Current scheduler being ran by the system */
 context* startCont; /* Original/Starting context */
 
+/* Round Robin Scheduling Functions */
+void rr_admit(thread new);
+void rr_remove(thread victim);
+thread rr_next(void);
+
+
+void rr_admit(thread new) {
+    /* Adds a new thread pointed to by (new) to the scheduler */
+ 
+    if (admitted > 0) {
+	thread prev_thread = tail;
+	prev_thread->lib_two = new;
+        new->lib_one = prev_thread;
+        new->lib_two = NULL;
+	tail = new;
+    }
+
+    admitted++;
+}
+
+
+void rr_remove(thread victim) {
+    /* Removes the thread pointed to by (victim) from the scheduler and fixes 
+     * the global linked list to fix broken ends
+     */ 
+
+    thread ct = head;
+    int thread_found = TRUE;
+
+    while (ct->tid != victim->tid) {
+	ct = ct->lib_two;
+
+	if (ct == NULL) {
+	    thread_found = FALSE;
+	    break;
+        }
+    }
+
+    if (thread_found) {
+	if ((ct->tid) == (head->tid)) {
+	    head = ct->lib_two;
+	    head->lib_one = NULL;
+        }
+	else {
+	    victim->lib_one->lib_two = victim->lib_two;
+	    if ((ct->tid) == (tail->tid)) {
+		tail = victim->lib_one;
+	    }
+	    else {
+        	victim->lib_two->lib_one = victim->lib_one;
+	    }
+	}
+    }
+   
+    admitted--;
+}
+
+
+thread rr_next() {
+    /* Saves the context of the current thread, and returns the thread that
+     * is now running on the scheduler
+     */
+
+    thread next_thread;
+
+    next_thread = cur_thread->lib_two;
+
+    if (next_thread) {
+	return next_thread;
+    }
+
+    return head; /* If we made it here, means we reached end of linked list */
+}
+
 
 tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
     /* Takes a function pointer (fun), a list of arguments (args), and
@@ -25,19 +99,23 @@ tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
     unsigned long* stack = malloc(ssize * sizeof(unsigned long));
 
     /* Push data to the stack */
-    unsigned long sp = 0;
-    stack[sp++] = (unsigned long) lwp_exit; /* Exit Call */
-    stack[sp++] = (unsigned long) fun; /* Function Pointer */
-    stack[sp++] = 0xdeadbeef; /* Required fluff */
+    int count = 0;
+    stack[count++] = (unsigned long) lwp_exit; /* Exit Call */
+    stack[count++] = (unsigned long) fun; /* Function Pointer */
+    stack[count++] = 0xdeadbeef; /* Required fluff */
+    unsigned long* sp = stack;
 
-    if (next_tid == 0) { /* Check if this is first thread being made */
+    if (admitted == 0) { /* Check if this is first thread being made */
 	head = newthread;
 	tail = head;
 
-	static struct scheduler init_sched = {NULL, NULL, rr_admit, rr_remove,
-					      rr_next};
-	scheduler RoundRobin = &init_sched;
-	lwp_set_scheduler(RoundRobin);
+	#ifndef INIT_SCHED
+	    #define INIT_SCHED
+	    static struct scheduler init_sched = {NULL, NULL, rr_admit,
+					          rr_remove, rr_next};
+	    scheduler RoundRobin = &init_sched;
+	    lwp_set_scheduler(RoundRobin);
+	#endif
     }
     __sync_fetch_and_add(&next_tid, 1);
     newthread->tid = next_tid;
@@ -47,47 +125,14 @@ tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
     newthread->stacksize = ssize;
 
     /* Set Stack Pointer State */
-    newthread->state.rsp = sp;
-    newthread->state.rbp = sp;
+    newthread->state.rsp = (unsigned long) sp;
+    newthread->state.rbp = (unsigned long) sp;
 
-    /* Store Arguments into Registers */
-    int count = 1;
-    int i = 0;
-    unsigned long* arguments = (unsigned long*) args;
-
-    while (arguments[i]) {
-	switch (count) {
-	    case 1:
-        	newthread->state.rdi = (unsigned long) arguments[i];
-                break;
-	    case 2:
-		newthread->state.rsi = (unsigned long) arguments[i];
-		break;
-	    case 3:
-		newthread->state.rdx = (unsigned long) arguments[i];
-		break;
-	    case 4:
-		newthread->state.rcx = (unsigned long) arguments[i];
-		break;
-	    case 5:
-		newthread->state.r8 = (unsigned long) arguments[i];
-		break;
-	    case 6:
-		newthread->state.r9 = (unsigned long) arguments[i];
-		break;
-	    default:
-		break;
-	}
-
-	count++;
-	i++;
-    }
-
+    /* Store arguments into register */
+    newthread->state.rdi = (unsigned long) args;
     newthread->state.fxsave = FPU_INIT; /* Store intital FPU state */
 
-    /* Admit the new LWP into the scheduler */
-    scheduler sched = lwp_get_scheduler();
-    sched->admit(newthread);
+    cur_sched->admit(newthread); /* Admit the new LWP into the scheduler */
 
     return newthread->tid;
 }
@@ -97,12 +142,13 @@ void lwp_exit() {
     /* Terminates the LWP that called this function */
 
     cur_sched->remove(cur_thread);
-    thread next_thread = cur_sched->next();
+    cur_thread = cur_sched->next();
 
     free(cur_thread->stack);
     free(cur_thread);
 
     /* Insert context switch here */
+    load_context(&(cur_thread->state));
 }
 
 
@@ -139,23 +185,19 @@ void lwp_yield() {
 void lwp_start() {
     /* Starts the LWP that called this function */
 
-    thread next_thread = cur_sched->next(); /* Get next thread */
+    if (admitted) {
+        cur_thread = head;
+        load_context(&(cur_thread->state));
+    }
 
-    if (next_thread) {
-	cur_thread = next_thread; /* Pick next thread */
-	save_context(&(startCont->state)); /* Save current state */
-	load_context(&(cur_thread->state)); /* Load state of new thread */
-    }
-    else { /* There was no next */
-        cur_thread = next_thread; /* So this should just be NULL */
-    }
+    lwp_stop();
 }
 
 
 void lwp_stop() {
     /* Stops the LWP that called this function */
 
-    load_context(&startCont->state); /* Go back to original state */
+    load_context(&(startCont->state)); /* Go back to original state */
 
     if (cur_thread) { /* Also save the other state */
 	save_context(&(cur_thread->state));
