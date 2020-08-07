@@ -13,79 +13,6 @@ thread cur_thread; /* Current thread being ran by the scheduler */
 scheduler cur_sched; /* Current scheduler being ran by the system */
 context* startCont; /* Original/Starting context */
 
-/* Round Robin Scheduling Functions */
-void rr_admit(thread new);
-void rr_remove(thread victim);
-thread rr_next(void);
-
-
-void rr_admit(thread new) {
-    /* Adds a new thread pointed to by (new) to the scheduler */
-   
-    tail->lib_two = new;
-    tail = new;
-    tail->lib_two = NULL;
-
-    admitted++;
-}
-
-
-void rr_remove(thread victim) {
-    /* Removes the thread pointed to by (victim) from the scheduler and fixes 
-     * the global linked list to fix broken ends
-     */ 
-
-    thread ct = head;
-    int thread_found = TRUE;
-
-    while (ct->tid != victim->tid) {
-	ct = ct->lib_two;
-
-	if (ct == NULL) {
-	    thread_found = FALSE;
-	    break;
-        }
-    }
-
-    if (thread_found) {
-	if ((ct->tid) == (head->tid)) {
-	    head = ct->lib_two;
-	    head->lib_one = NULL;
-        }
-	else {
-	    victim->lib_one->lib_two = victim->lib_two;
-	    if ((ct->tid) == (tail->tid)) {
-		tail = victim->lib_one;
-	    }
-	    else {
-        	victim->lib_two->lib_one = victim->lib_one;
-	    }
-	}
-    }
-   
-    admitted--;
-}
-
-
-thread rr_next() {
-    /* Saves the context of the current thread, and returns the thread that
-     * is now running on the scheduler
-     */
-
-    thread next_thread;
-
-    lwp_yield();
-    next_thread = cur_thread->lib_two;
-
-    if (next_thread) {
-	cur_thread = next_thread;
-	return next_thread;
-    }
-
-    cur_thread = head;
-    return head; /* If we made it here, means we reached end of linked list */
-}
-
 
 tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
     /* Takes a function pointer (fun), a list of arguments (args), and
@@ -186,7 +113,7 @@ tid_t lwp_gettid() {
         return cur_thread->tid;
     }
 
-    return NULL;
+    return NO_THREAD;
 }
 
 
