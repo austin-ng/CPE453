@@ -210,14 +210,29 @@ void lwp_set_scheduler(scheduler fun) {
      * scheduler
      */
 
-    cur_sched = fun;
+    /* needs test - RoundRobin saved? */
+    if (fun == NULL) {
+        return;
+    }
+
+    thread nextthread;
+    scheduler current;
+
+    current = RoundRobin;
+    nextthread = current->next();
+    while (nextthread != NULL) {
+        current->remove(nextthread);
+        fun->admit(nextthread);
+    }
+    RoundRobin = fun;
+    return;
 }
 
 
 scheduler lwp_get_scheduler() {
     /* Returns the current scheduling function being ran */
 
-    return cur_sched;
+    return RoundRobin;
 }
 
 
