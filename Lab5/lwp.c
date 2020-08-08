@@ -155,7 +155,7 @@ void lwp_exit() {
 
     cur_thread = next_thread;
 
-    if (cur_thread) {
+    if (admitted != 0) {
         load_context(&(cur_thread->state)); /* Context switch */
     }
     else {
@@ -213,9 +213,7 @@ void lwp_start() {
         }
     }
     
-    load_context(&(cur_thread->state));	
-
-    lwp_stop();
+    load_context(&(cur_thread->state));	/* Load first thread's context */
 }
 
 
