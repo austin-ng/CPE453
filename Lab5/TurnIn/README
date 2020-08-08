@@ -1,0 +1,10 @@
+Group Member Names: Yvan Gonzalez (yggonzal), Austin Ng (ang24), and Kelechi Igwe (kigwe)
+
+Instructions: Run make in directory to make library (liblwp.so). Then use that
+library to test any program. To run program, do:
+gcc -o <executable> <main.c> -L. liblwp.so
+
+Yvan: lwp_gettid, lwp_stop, lwp_yield, lwp_start
+Austin: lwp_set_scheduler, lwp_get_scheduler, rr_admit, rr_next, rr_remove
+Kelechi: lwp_create, lwp_exit, tid2thread, Makefile
+
