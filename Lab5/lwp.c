@@ -3,15 +3,16 @@
 #include "fp.h"
 #include "lwp.h"
 
+#define NUM_THREADS 64
 
 static tid_t next_tid = 0; /* Thread ID value to set new thread to */
 static int admitted = 0; /* Number of threads currently in the scheduler */
 
-thread head; /* Head (start) of the global threads linked list */
-thread tail; /* Tail (end) of the global threads linked list */
-thread cur_thread; /* Current thread being ran by the scheduler */
-scheduler cur_sched; /* Current scheduler being ran by the system */
-context* startCont; /* Original/Starting context */
+static thread head = NULL; /* Head (start) of the global threads linked list */
+static thread tail = NULL; /* Tail (end) of the global threads linked list */
+static thread cur_thread = NULL; /* Current thread being ran by the scheduler */
+static scheduler cur_sched; /* Current scheduler being ran by the system */
+static context* startCont; /* Original/Starting context */
 
 /* Round Robin Scheduling Functions */
 void rr_admit(thread new);
@@ -54,7 +55,9 @@ void rr_remove(thread victim) {
     if (thread_found) {
 	if ((ct->tid) == (head->tid)) {
 	    head = ct->lib_two;
-	    head->lib_one = NULL;
+	    if (head) {
+	        head->lib_one = NULL;
+	    }
         }
 	else {
 	    victim->lib_one->lib_two = victim->lib_two;
@@ -81,10 +84,11 @@ thread rr_next() {
     next_thread = cur_thread->lib_two;
 
     if (next_thread) {
-	return next_thread;
+	return next_thread; /* Get next item in linked list */
     }
-
-    return head; /* If we made it here, means we reached end of linked list */
+    else {
+        return head; /* Jump back to beginning in linked list */
+    }
 }
 
 
@@ -94,16 +98,32 @@ tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
      * Returns the thread id of the new LWP
      */
 
+    unsigned long sp; /* Stack indexer for traversing stack */
+
     /* Allocate memory for new LWP */
     thread newthread = malloc(sizeof(context));
     unsigned long* stack = malloc(ssize * sizeof(unsigned long));
 
     /* Push data to the stack */
-    int count = 0;
-    stack[count++] = (unsigned long) lwp_exit; /* Exit Call */
-    stack[count++] = (unsigned long) fun; /* Function Pointer */
-    stack[count++] = 0xdeadbeef; /* Required fluff */
-    unsigned long* sp = stack;
+    sp = ssize; /* Move to TOS (Top of Stack) */
+
+    stack[sp--] = (unsigned long) lwp_exit; /* Return address */
+    stack[sp--] = (unsigned long) fun; /* Function pointer */
+    stack[sp] = 0xdeadbeef; /* Base Pointer (required fluff) */
+ 
+    newthread->tid = ++next_tid; /* Set tid */
+
+    /* Set Stack Pointer and Stack Size */
+    newthread->stack = stack;
+    newthread->stacksize = ssize;
+
+    /* Set Stack Pointer State */
+    newthread->state.rsp = (unsigned long) (stack + sp);
+    newthread->state.rbp = (unsigned long) (stack + sp);
+
+    /* Store arguments into register */
+    newthread->state.rdi = (unsigned long) args;
+    newthread->state.fxsave = FPU_INIT; /* Store intital FPU state */
 
     if (admitted == 0) { /* Check if this is first thread being made */
 	head = newthread;
@@ -117,38 +137,30 @@ tid_t lwp_create(lwpfun fun, void* args, size_t ssize) {
 	    lwp_set_scheduler(RoundRobin);
 	#endif
     }
-    __sync_fetch_and_add(&next_tid, 1);
-    newthread->tid = next_tid;
-
-    /* Set Stack Pointer and Stack Size */
-    newthread->stack = stack;
-    newthread->stacksize = ssize;
-
-    /* Set Stack Pointer State */
-    newthread->state.rsp = (unsigned long) sp;
-    newthread->state.rbp = (unsigned long) sp;
-
-    /* Store arguments into register */
-    newthread->state.rdi = (unsigned long) args;
-    newthread->state.fxsave = FPU_INIT; /* Store intital FPU state */
 
     cur_sched->admit(newthread); /* Admit the new LWP into the scheduler */
 
-    return newthread->tid;
+    return next_tid;
 }
 
 
 void lwp_exit() {
     /* Terminates the LWP that called this function */
 
-    cur_sched->remove(cur_thread);
-    cur_thread = cur_sched->next();
+    thread next_thread = cur_sched->next();
+    cur_sched->remove(cur_thread); /* Remove from scheduler */
 
-    free(cur_thread->stack);
+    free(cur_thread->stack); /* Free memory */
     free(cur_thread);
 
-    /* Insert context switch here */
-    load_context(&(cur_thread->state));
+    cur_thread = next_thread;
+
+    if (cur_thread) {
+        load_context(&(cur_thread->state)); /* Context switch */
+    }
+    else {
+	lwp_stop();
+    }
 }
 
 
@@ -168,27 +180,40 @@ void lwp_yield() {
      * the LWP from running
      */
 
-    thread next_thread = cur_sched->next(); /* Get next thread */
+    if (admitted > 1) {
+        thread next_thread = cur_sched->next(); /* Get next thread */
+        save_context(&(cur_thread->state)); /* Save current state */
 
-    save_context(&(cur_thread->state)); /* Save current state */
-
-    if (!next_thread) { /* If there's no new thread to go to */
-	lwp_stop();
+        cur_thread = next_thread;
+        load_context(&(cur_thread->state)); /* Load new state */
     }
     else {
-	cur_thread = next_thread;
-	load_context(&(cur_thread->state)); /* Load new state */
+	save_context(&(cur_thread->state));
+	load_context(&(cur_thread->state));
     }
 }
 
 
 void lwp_start() {
-    /* Starts the LWP that called this function */
+    /* Starts the LWP thiat called this function */
 
-    if (admitted) {
-        cur_thread = head;
-        load_context(&(cur_thread->state));
+    /* Save "real" context (original state) */
+    startCont = malloc(sizeof(context));
+    unsigned long sp = 0;
+    GetSP(sp);
+    startCont->state.rsp = sp;
+    startCont->state.rbp = sp;
+    startCont->state.fxsave = FPU_INIT;
+
+    save_context(&(startCont->state));
+
+    if (!cur_thread) { /* If there isn't an unfinished thread in scheduler */
+        if (admitted) {
+            cur_thread = head;
+        }
     }
+    
+    load_context(&(cur_thread->state));	
 
     lwp_stop();
 }
@@ -210,7 +235,6 @@ void lwp_set_scheduler(scheduler fun) {
      * scheduler
      */
 
-    /* needs test */
     if (fun == NULL) {
         return;
     }
@@ -218,12 +242,15 @@ void lwp_set_scheduler(scheduler fun) {
     thread nextthread;
     scheduler current;
 
-    current = cur_sched;
-    nextthread = current->next();
-    while (nextthread != NULL) {
-        current->remove(nextthread);
-        fun->admit(nextthread);
+    if (cur_sched) {
+        current = cur_sched;
+        nextthread = current->next();
+        while (nextthread != NULL) {
+            current->remove(nextthread);
+            fun->admit(nextthread);
+        }
     }
+
     cur_sched = fun;
     return;
 }
