@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "allocator.h"
 
 
+static char* cur_process_name; /* Current loaded process's name */
+static int cur_mem_req; /* Current loaded process's request memory */
+static char cur_alloc_flag; /* Current loaded process's allocation method */
 static int cur_mem_left = 0; /* Current amount of free memory */
-static int num_processes = 0; /* Number of processes in memory */
-static char* processes[MAX_PROCESSES]; /* List of running processes */
+static int initial_mem = 0; /* Starting amount of memory */
+static memblock* head = NULL;
 
 
 void showCommands() {
@@ -30,19 +34,24 @@ int validCommand(char* cmd) {
     /* Given the current command (cmd), parses through the command and checks
      * whether the command is valid or not. If it is valid, the function
      * returns 0 for a RQ command and 1 for a RL command. If the command is
-     * invalid, returns 2
+     * invalid returns 2 or if there isn't enough memory, returns 3.
      */
 
     char c;
+    char process_desc[CMD_MAX_LEN]; /* Temp buffer to hold process_name */
+    char requested_mem_str[CMD_MAX_LEN]; /* Temp buffer to hold alloc size */
+    int requested_mem = 0; /* Amount of memory requested by user */
     int process_found = 0; /* Flag for whether process arg was found */
     int amount_found = 0; /* Flag for whether amount arg was found */
-    int flag_found = 0; /* Flag for whether flag arg was found */
 
     if (cmd[0] == 'R') { /* If command starts with RQ or RL */
         if ((cmd[1] == 'Q') || (cmd[1] == 'L')) {
 	    if (cmd[2] == ' ') { /* If command separates RQ/RL and process */
 		int i = 3;
+		int j = 0;
+		int k = 0;
 		c = '\0';
+
 		while (cmd[i] != '\0') {
 		    /* Walk through the rest of the string and see if there
  		     * is either just a single word in the string (for RL
@@ -54,12 +63,26 @@ int validCommand(char* cmd) {
 			    c = '\0';
 			    if (!process_found) {
 				process_found = 1; //single word found
+				process_desc[j] = '\0';
 			    }
 			    else if (!amount_found) {
 				amount_found = 1; //single number found
-			    }
-			    else if (!flag_found) {
-				flag_found = 1; //single letter found
+				requested_mem_str[k] = '\0';
+				requested_mem = atoi(requested_mem_str);
+
+				if (requested_mem <= 0) {
+	                            fprintf(stderr, "Error: '%s' is not a "
+				    "valid memory size.\n", requested_mem_str);
+ 				    fflush(stderr);
+				    return 2;
+				}
+    				else if (requested_mem > cur_mem_left) {
+				    fprintf(stderr, "Error: Cannot allocate %s"
+				    " bytes when there is only %d bytes left."
+				    "\n", requested_mem_str, cur_mem_left);
+				    fflush(stderr);
+				    return 3;
+				}
 			    }
 			    else {
 				return 2; //more characters after arguments
@@ -67,24 +90,43 @@ int validCommand(char* cmd) {
 			}
 		    }
 		    else {
+			if (!process_found) {
+			    process_desc[j++] = cmd[i];
+			}
+			else if (!amount_found) {
+			    requested_mem_str[k++] = cmd[i];
+			}
+    
 			c = cmd[i]; //Show that there is something in string
 		    }
 
 		    i++;
 		}
 
+                /* Check if command is valid RL or RQ command */
                 if ((c != '\0') && (cmd[1] == 'L') && (!process_found)) {
 		    /* If valid RL command */
+		    process_desc[j] = '\0';
+		    cur_process_name = strdup(process_desc);
 		    return 1;
 		}
-		else if ((((c == '\0') && flag_found) || ((c != '\0') &&
-			    (cmd[i-2] == ' '))) && (cmd[1] == 'Q') && 
-			    process_found && amount_found) {
+		else if ((c != '\0') && (cmd[i-2] == ' ') && (cmd[1] == 'Q')
+			   && process_found && amount_found) {
 		    /* If valid RQ command */
-		    return 0;
+		    c = cmd[i-1];
+		    if ((c == 'F') || (c == 'B') || (c == 'W')) {
+			/* If flag is also valid */
+			cur_process_name = strdup(process_desc);
+			cur_mem_req = requested_mem;
+			cur_alloc_flag = c;
+		        return 0;
+		    }
+		    else {
+			return 2; //No F, B, or W flag
+		    }
 		}
 		else {
-		    return 2;
+		    return 2; //Not valid RQ/RL command
 		}
 	    }
 	    else {
@@ -107,69 +149,118 @@ void setMemorySize(int m_size) {
      * other initial variables, including,
      */
 
+    initial_mem = m_size;
     cur_mem_left = m_size;
 }
 
 
-void requestMemory(char* cmd) {
+void requestMemory() {
     /* Allocates a contiguous block of memory to a process, where the process
      * name, memory size, and method are all defined in the string (cmd)
      */
-    
-    char process_desc[CMD_MAX_LEN];
-    char requested_mem_str[CMD_MAX_LEN];
-    int requested_mem = 0;
 
-    if (num_processes == MAX_PROCESSES) {
-	fprintf(stderr, "Unable to add new process. Max number of processes"
-			" have been reached.\n");
-	fflush(stderr);
-	return;
-    }
+    int cur_block_size = 0; /* Block size of cur block we are looking at */
+    int good_req = 0; /* Flag for whether the requested was fulfilled */
 
-    int i = 2;
-    while (cmd[++i] != ' ');
+    /* Initialize new block */
+    memblock* new_mblock = malloc(sizeof(memblock));
+    new_mblock->name = cur_process_name;
 
-    int j = 0;
-    while (cmd[i] != ' ') {
-	process_desc[j++] = cmd[i++];
-    }
-    
-    process_desc[j++] = ',';
+    /* Initialize trackers and counters for traversing memory */
+    memblock* cur_block = head;
+    memblock* prev_block = head;
+    memblock* best_block = NULL;
+    memblock* best_prev_block = NULL;
+    int biggest_hole = 0; /* Size of the biggest hole in memory */
+    int smallest_hole = 0; /* Size of the smallest hole in memory */
 
-    while (cmd[i++] != ' ');
+    if (!head) { /* First process being allocated */
+	new_mblock->start = 0;
+	new_mblock->end = cur_mem_req-1;
+	head = new_mblock;
+        cur_mem_left -= cur_mem_req;
 
-    int k = 0;
-    while (cmd[i] != ' ') {
-        requested_mem_str[k++] = cmd[i];   
-	process_desc[j++] = cmd[i++];
-    }
-
-    requested_mem_str[k] = '\0';
-    process_desc[j] = '\0';
-
-    requested_mem = atoi(requested_mem_str);
-
-    if (requested_mem == 0) {
-	fprintf(stderr, "Error: '%s' is not a valid memory size.\n",
-		requested_mem_str);
- 	fflush(stderr);
-	return;
-    }
-    else if (requested_mem > cur_mem_left) {
-	fprintf(stderr, "Error: Cannot allocate %s bytes when there is only"
-			" %d bytes left.\n", requested_mem_str, cur_mem_left);
-	fflush(stderr);
-	return;
+        if (cur_mem_left != 0) { /* If hole is created due to first process */
+	    memblock* empty_mblock = malloc(sizeof(memblock));
+	    empty_mblock->name = NULL;
+            empty_mblock->start = new_mblock->end + 1;
+	    empty_mblock->end = initial_mem - 1;
+	    new_mblock->next = empty_mblock;
+	}
+	else {
+	    new_mblock->next = NULL;
+	}
     }
     else {
-	cur_mem_left -= requested_mem;
-	processes[num_processes] = process_desc;
+	/* Initialize trackers and counters for traversing memory */
+        while (cur_block) {
+	    cur_block_size = cur_block->end - cur_block->start + 1;
+
+	    if (cur_block->name == NULL) { /* If hole */
+	        if (cur_block_size >= cur_mem_req) { /* If new block fits */
+		    if ((cur_alloc_flag == 'B') && (cur_block_size <
+			 smallest_hole)) { /* Get smallest hole for best-fit */
+		        smallest_hole = cur_block_size;
+		     	best_block = cur_block;
+		    	best_prev_block = prev_block;
+			good_req = 1;
+		    }
+		    else if ((cur_alloc_flag == 'W') && (cur_block_size >
+			 biggest_hole)) { /* Get biggest hole for worst-fit */
+		        biggest_hole = cur_block_size;
+		     	best_block = cur_block;
+		    	best_prev_block = prev_block;
+			good_req = 1;
+		    }
+		    else { /* Save first good hole for first-fit */
+			best_block = cur_block;
+			best_prev_block = prev_block;
+			good_req = 1;
+			break;
+		    }
+		}
+	    }
+
+	    /* Move to next memory block */
+	    prev_block = cur_block;
+	    cur_block = cur_block->next;
+        }
     }
+
+    if (good_req) { 
+	/* If we found a good hole in populated memory */
+        cur_block_size = best_block->end - best_block->start + 1;
+
+	if (cur_block_size == cur_mem_req) { /* No need to make new block */
+	    best_block->name = new_mblock->name;
+	    free(new_mblock);
+	}
+	else { /* Insert new block at the beginning of the hole */
+	    new_mblock->start = best_block->start;
+	    new_mblock->end = new_mblock->start + cur_mem_req - 1;
+	    best_block->start = new_mblock->end + 1;
+	    new_mblock->next = best_block;
+
+	    if (best_block == head) {
+		head = new_mblock;
+	    }
+	    else {
+		best_prev_block->next = new_mblock;
+	    }
+	}
+
+	cur_mem_left -= cur_mem_req;
+    }
+    else if (cur_block_size != 0) { /* Was not able to find a hole in memory */
+	free(new_mblock);
+	fprintf(stderr, "Unable to request memory for process %s.\n",
+		cur_process_name);
+	fflush(stderr);
+    } 
 }
 
 
-void releaseMemory(char* cmd) {
+void releaseMemory() {
     /* Releases the contiguous block of memory pointed to a process, where
      * the process name is defined in the string (cmd)
      */

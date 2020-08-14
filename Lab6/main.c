@@ -17,12 +17,13 @@ int main(int argc, char* argv[]) {
     }
 
     if ((init_size = atoi(argv[1])) == 0) {
-	fprintf(stderr, "Error: Initial memory size must be an integer\n");
+	fprintf(stderr, "Error: Initial memory size must be a positive"
+			" integer.\n");
 	exit(EXIT_FAILURE);
     }
 
     if (init_size > MAX) {
-	fprintf(stderr, "Error: Initial memory size must be less than %d\n",
+	fprintf(stderr, "Error: Initial memory size must be less than %d.\n",
 		MAX);
 	exit(EXIT_FAILURE);
     }
@@ -92,21 +93,26 @@ int main(int argc, char* argv[]) {
 	        else if (line_len > 4) {
 		    if ((err = validCommand(cmd)) < 2) {
 		        if (err == 0) { /* RQ command */
-			    requestMemory(cmd);
+			    requestMemory();
 		        }
 		        else {
-			    releaseMemory(cmd);
+			    releaseMemory();
 		        }
 		    }
 		    else {
-		        showCommands();
+			if (err == 2) {
+		            showCommands();
+			}
 		    }
 	        }
+		else {
+		    showCommands();
+		}
 	    }
 	}
 
 	err = 0;
-    }   
+    } 
 
     return 0;
 }
