@@ -294,6 +294,7 @@ void releaseMemory() {
                         cur_block->name = NULL;;
                         free(freeName);
                         free(next_block);
+			break;
                     }
                     else { /* if next block is not hole */
                         /* add to remaining memory and make cur_block a hole */
@@ -301,6 +302,7 @@ void releaseMemory() {
                         freeName = cur_block->name;
                         cur_block->name = NULL;
                         free(freeName);
+			break;
                     }
                 }
                 else { /* if there is a prev AND next block, check for holes */
@@ -316,6 +318,7 @@ void releaseMemory() {
 			free(freeName);
                         free(cur_block);
                         free(next_block);
+			break;
                     }
                     else if (!prev_block->name && next_block->name) { /*prev*/
                         /* add to remaining memory */
@@ -326,6 +329,7 @@ void releaseMemory() {
                         freeName = cur_block->name;
                         free(freeName);
                         free(cur_block);
+			break;
                     }
                     else if (prev_block->name && !next_block->name) { /*next*/
                         /* add to remaining memory */
@@ -337,6 +341,7 @@ void releaseMemory() {
                         cur_block->name = NULL;
                         free(freeName);
                         free(next_block);
+			break;
                     }
                     else { /* if prev and next are not holes */
                         /* add to remaining memory and make cur_block a hole */
@@ -344,6 +349,7 @@ void releaseMemory() {
                         freeName = cur_block->name;
                         cur_block->name = NULL;
                         free(freeName);
+			break;
                     }
                 }
             }
@@ -354,6 +360,7 @@ void releaseMemory() {
                     freeName = cur_block->name;
                     cur_block->name = NULL;
                     free(freeName);
+		    break;
                 }
                 else { /* if there is a previous block */
                     if (prev_block->name == NULL) { /* if prev_block is hole */
@@ -365,12 +372,14 @@ void releaseMemory() {
                         freeName = cur_block->name;
                         free(freeName);
                         free(cur_block);
+			break;
                     }
                     else { /* if prev_block is not hole, make cur_block hole */
                         cur_mem_left += cur_block_size;
                         freeName = cur_block->name;
                         cur_block->name = NULL;
                         free(freeName);
+			break;
                     }
                 }
             }
@@ -391,6 +400,78 @@ void releaseMemory() {
 
 void compactMemory() {
     /* Compacts the unused holes of memory into a single contiguous block */
+
+    int compacted = 0; /* Flag for whether any memory was compacted or not */
+    int cur_block_size = 0;
+    int aff_block_size = 0;
+    memblock* cur_block = head;
+    memblock* first_hole = NULL;
+    memblock* prev_block = NULL;
+    memblock* end_block = NULL;
+
+    while (cur_block) {
+	cur_block_size = cur_block->end - cur_block->start + 1;
+
+	if (cur_block->name == NULL) {
+	    cur_block_size = cur_block->end - cur_block->start + 1;
+
+	    if (cur_block_size == initial_mem) {
+		break;
+	    }
+	    else if (end_block == NULL) {
+		end_block = malloc(sizeof(memblock));
+		end_block->name = "";
+		end_block->start = initial_mem - cur_mem_left - 1;
+		end_block->end = initial_mem - 1;
+		end_block->next = NULL;
+
+		if (prev_block) {
+		    prev_block->next = cur_block->next;
+		}
+		else {
+		    head = cur_block->next;
+		}
+
+		first_hole = cur_block;
+	    }
+	    else {
+		if (cur_block->next) {
+		    aff_block_size = cur_block->next->end - 
+				     cur_block->next->start + 1;
+		    cur_block->next->start = prev_block->end + 1;
+		    cur_block->next->end = cur_block->next->start +
+					   aff_block_size - 1;
+                }
+
+		prev_block->next = cur_block->next;
+		free(cur_block);
+		compacted = 1;
+	    }
+	}
+	else {
+	    if (compacted) {
+		aff_block_size = cur_block->end - cur_block->start + 1;
+		cur_block->start = prev_block->end + 1;
+		cur_block->end = cur_block->start + aff_block_size - 1;
+	    }
+	}	
+
+	prev_block = cur_block;
+	cur_block = cur_block->next;
+    }
+
+    if (!compacted) {
+	if (end_block) {
+	    free(end_block);
+	}
+
+	fprintf(stderr, "Unable to find holes in memory to compact.\n");
+	fflush(stderr);
+    }
+    else {
+	prev_block->next = end_block;
+	free(first_hole);
+    }
 }
 
 
@@ -401,17 +482,23 @@ void printStatus() {
 
     memblock* cur_block = head;
 
-    while (cur_block) {
-        if (cur_block->name) {
-            printf("Addresses [%d:%d] Process %s\n",
-                    cur_block->start, cur_block->end, cur_block->name);
-            fflush(stdout);
-        } else {
-            printf("Addresses [%d:%d] Unused\n",
-                    cur_block->start, cur_block->end);
-            fflush(stdout);
-        }
-        cur_block = cur_block->next;
+    if (!head) {
+	printf("Addresses [0:%d] Unused\n", initial_mem - 1);
+	fflush(stdout);
+    }
+    else {
+        while (cur_block) {
+            if (cur_block->name) {
+                printf("Addresses [%d:%d] Process %s\n",
+                       cur_block->start, cur_block->end, cur_block->name);
+                fflush(stdout);
+            } else {
+                printf("Addresses [%d:%d] Unused\n",
+                       cur_block->start, cur_block->end);
+                fflush(stdout);
+            }
+            cur_block = cur_block->next;
+	}
     }
 
 }
