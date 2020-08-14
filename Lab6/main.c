@@ -78,6 +78,10 @@ int main(int argc, char* argv[]) {
 	            if (cmd[0] == 'C') { /* If user requested compact */
 	    	        compactMemory();
 		    }
+		    else if (cmd[0] == 'X') { /* User wants to exit */
+			freeMemory();
+			break;
+		    }
 		    else {
 		        showCommands();
 		    }

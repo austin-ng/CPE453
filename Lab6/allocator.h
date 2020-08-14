@@ -20,4 +20,6 @@ void releaseMemory(void);
 void compactMemory(void);
 void printStatus(void);
 
+void freeMemory(void);
+
 #endif /* ALLOCATOR_H */

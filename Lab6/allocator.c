@@ -24,7 +24,8 @@ void showCommands() {
 		     "<F, B, or W>\n");
     fprintf(stderr, "2. 'RL <process_name>'\n");
     fprintf(stderr, "3. 'C'\n");
-    fprintf(stderr, "4. 'STAT'\n\n");
+    fprintf(stderr, "4. 'STAT'\n");
+    fprintf(stderr, "5. 'X'\n");
 
     fflush(stderr);
 }
@@ -179,7 +180,7 @@ void requestMemory() {
 	new_mblock->end = cur_mem_req-1;
 	head = new_mblock;
         cur_mem_left -= cur_mem_req;
-
+	
         if (cur_mem_left != 0) { /* If hole is created due to first process */
 	    memblock* empty_mblock = malloc(sizeof(memblock));
 	    empty_mblock->name = NULL;
@@ -262,10 +263,11 @@ void requestMemory() {
 
 void releaseMemory() {
     /* Releases the contiguous block of memory pointed to a process, where
-     * the process name is defined in the string (cmd)
+     * the process name is stored in the global variable, cur_process_name
      */
 
     int cur_block_size = 0;
+    int released = 0;
     char* removeMe;
     char* freeName;
     removeMe = cur_process_name;
@@ -277,7 +279,9 @@ void releaseMemory() {
     while (cur_block) {
         cur_block_size = cur_block->end - cur_block->start + 1;
         next_block = cur_block->next;
-        if (!strcmp(cur_block->name, removeMe)) { /* if name matches */
+        if (cur_block->name == NULL); /* Move on if cur_block is hole */
+        else if (!strcmp(cur_block->name, removeMe)) { /* if name matches */
+	    released = 1; /* Set flag that we found process */
             if (next_block) { /* if there is a next block */
                 if (prev_block == NULL) { /* if there is no previous block */
                     if (next_block->name == NULL) { /* if next block is hole */
@@ -308,6 +312,8 @@ void releaseMemory() {
                         prev_block->end = next_block->end;
                         prev_block->next = next_block->next;
                         free(freeName);
+			freeName = next_block->name;
+			free(freeName);
                         free(cur_block);
                         free(next_block);
                     }
@@ -328,7 +334,7 @@ void releaseMemory() {
                         cur_block->end = next_block->end;
                         cur_block->next = next_block->next;
                         freeName = cur_block->name;
-                        cur_block->name = NULL;;
+                        cur_block->name = NULL;
                         free(freeName);
                         free(next_block);
                     }
@@ -374,6 +380,12 @@ void releaseMemory() {
         cur_block = next_block;
     }
 
+    if (!released && cur_process_name) {
+	fprintf(stderr, "Unable to find and remove process '%s' from"
+			" memory.\n", cur_process_name);
+	fflush(stderr);
+    }
+
 }
 
 
@@ -386,4 +398,28 @@ void printStatus() {
     /* Prints to stdout the regions of memory that are allocated to processes
      * and the regions of memory that are unused
      */
+}
+
+
+void freeMemory() {
+    /* Removes all of the processes from memory and frees structures and
+     * strings to avoid memory leaks
+     */
+
+    memblock* cur_block = head;
+    memblock* next_block = NULL;
+    char* freeName;
+
+    while (cur_block) {
+	next_block = cur_block->next;
+
+        if ((freeName = cur_block->name)) { /* If not a hole */
+	    free(freeName); /* Free name before freeing structure */
+	}
+
+        free(cur_block);
+	cur_block = next_block;
+    }
+
+    cur_mem_left = initial_mem; /* Restore free memory amount */
 }
