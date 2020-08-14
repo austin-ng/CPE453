@@ -398,6 +398,22 @@ void printStatus() {
     /* Prints to stdout the regions of memory that are allocated to processes
      * and the regions of memory that are unused
      */
+
+    memblock* cur_block = head;
+
+    while (cur_block) {
+        if (cur_block->name) {
+            printf("Addresses [%d:%d] Process %s\n",
+                    cur_block->start, cur_block->end, cur_block->name);
+            fflush(stdout);
+        } else {
+            printf("Addresses [%d:%d] Unused\n",
+                    cur_block->start, cur_block->end);
+            fflush(stdout);
+        }
+        cur_block = cur_block->next;
+    }
+
 }
 
 
