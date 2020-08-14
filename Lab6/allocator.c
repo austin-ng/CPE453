@@ -264,6 +264,116 @@ void releaseMemory() {
     /* Releases the contiguous block of memory pointed to a process, where
      * the process name is defined in the string (cmd)
      */
+
+    int cur_block_size = 0;
+    char* removeMe;
+    char* freeName;
+    removeMe = cur_process_name;
+    memblock* cur_block = head;
+    memblock* prev_block = NULL;
+    memblock* next_block = NULL;
+
+    /* go through each block to find matching name */
+    while (cur_block) {
+        cur_block_size = cur_block->end - cur_block->start + 1;
+        next_block = cur_block->next;
+        if (!strcmp(cur_block->name, removeMe)) { /* if name matches */
+            if (next_block) { /* if there is a next block */
+                if (prev_block == NULL) { /* if there is no previous block */
+                    if (next_block->name == NULL) { /* if next block is hole */
+                        /* add to remaining memory */
+                        cur_mem_left += cur_block_size;
+                        /* combine cur_block and next_block */
+                        cur_block->end = next_block->end;
+                        cur_block->next = next_block->next;
+                        freeName = cur_block->name;
+                        cur_block->name = NULL;;
+                        free(freeName);
+                        free(next_block);
+                    }
+                    else { /* if next block is not hole */
+                        /* add to remaining memory and make cur_block a hole */
+                        cur_mem_left += cur_block_size;
+                        freeName = cur_block->name;
+                        cur_block->name = NULL;
+                        free(freeName);
+                    }
+                }
+                else { /* if there is a prev AND next block, check for holes */
+                    if (!prev_block->name && !next_block->name) { /* both */
+                        /* add to remaining memory */
+                        cur_mem_left += cur_block_size;
+                        /* combine prev, cur and next into single hole */
+                        freeName = cur_block->name;
+                        prev_block->end = next_block->end;
+                        prev_block->next = next_block->next;
+                        free(freeName);
+                        free(cur_block);
+                        free(next_block);
+                    }
+                    else if (!prev_block->name && next_block->name) { /*prev*/
+                        /* add to remaining memory */
+                        cur_mem_left += cur_block_size;
+                        /* combine prev_block and cur_block */
+                        prev_block->end = cur_block->end;
+                        prev_block->next = cur_block->next;
+                        freeName = cur_block->name;
+                        free(freeName);
+                        free(cur_block);
+                    }
+                    else if (prev_block->name && !next_block->name) { /*next*/
+                        /* add to remaining memory */
+                        cur_mem_left += cur_block_size;
+                        /* combine cur_block and next_block */
+                        cur_block->end = next_block->end;
+                        cur_block->next = next_block->next;
+                        freeName = cur_block->name;
+                        cur_block->name = NULL;;
+                        free(freeName);
+                        free(next_block);
+                    }
+                    else { /* if prev and next are not holes */
+                        /* add to remaining memory and make cur_block a hole */
+                        cur_mem_left += cur_block_size;
+                        freeName = cur_block->name;
+                        cur_block->name = NULL;
+                        free(freeName);
+                    }
+                }
+            }
+            else { /* if this is the last block */
+                if (prev_block == NULL) { /* if this is the only block */
+                    /* add to remaining memory and make cur_block a hole */
+                    cur_mem_left += cur_block_size;
+                    freeName = cur_block->name;
+                    cur_block->name = NULL;
+                    free(freeName);
+                }
+                else { /* if there is a previous block */
+                    if (prev_block->name == NULL) { /* if prev_block is hole */
+                        /* add to remaining memory */
+                        cur_mem_left += cur_block_size;
+                        /* combine prev_block and cur_block */
+                        prev_block->end = cur_block->end;
+                        prev_block->next = cur_block->next;
+                        freeName = cur_block->name;
+                        free(freeName);
+                        free(cur_block);
+                    }
+                    else { /* if prev_block is not hole, make cur_block hole */
+                        cur_mem_left += cur_block_size;
+                        freeName = cur_block->name;
+                        cur_block->name = NULL;
+                        free(freeName);
+                    }
+                }
+            }
+        }
+
+        prev_block = cur_block;
+        cur_block = next_block;
+    }
+
 }
 
 
