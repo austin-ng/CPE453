@@ -402,40 +402,59 @@ void compactMemory() {
     /* Compacts the unused holes of memory into a single contiguous block */
 
     int compacted = 0; /* Flag for whether any memory was compacted or not */
-    int cur_block_size = 0;
-    int aff_block_size = 0;
+    int cur_block_size = 0; /* Block size of current block */
+    int aff_block_size = 0; /* Block size of block affected by compact */
     memblock* cur_block = head;
-    memblock* first_hole = NULL;
     memblock* prev_block = NULL;
     memblock* end_block = NULL;
+
+    /* Values that hold onto original first hole in case there is only one
+     * hole in memory */
+    int recovery_start, recovery_end = 0;
+    memblock* recovery_prev = NULL;
+    memblock* recovery_next = NULL;
 
     while (cur_block) {
 	cur_block_size = cur_block->end - cur_block->start + 1;
 
-	if (cur_block->name == NULL) {
-	    cur_block_size = cur_block->end - cur_block->start + 1;
-
-	    if (cur_block_size == initial_mem) {
+	if (cur_block->name == NULL) { /* If hole */
+	    if (cur_block_size == initial_mem) { /* If empty memory */
 		break;
 	    }
-	    else if (end_block == NULL) {
-		end_block = malloc(sizeof(memblock));
-		end_block->name = "";
-		end_block->start = initial_mem - cur_mem_left - 1;
+	    else if (end_block == NULL) { /* If first hole found */
+		end_block = cur_block;
+		recovery_start = cur_block->start;
+		recovery_end = cur_block->end;
+		recovery_next = cur_block->next;
+		
+		if (prev_block) { /* If not head/top of the memory */
+		    recovery_prev = prev_block;
+		    prev_block->next = cur_block->next;
+
+		    /* Change addresses to connect prev block and next block */
+		    aff_block_size = cur_block->next->end - 
+				     cur_block->next->start + 1;
+		    cur_block->next->start = prev_block->end + 1;
+		    cur_block->next->end = cur_block->next->start +
+					   aff_block_size - 1;
+		}
+		else { /* If hole was head/top of memory */
+		    head = cur_block->next;
+		    aff_block_size = cur_block->next->end -
+				     cur_block->next->start + 1;
+		    cur_block->next->start = 0;
+		    cur_block->next->end = aff_block_size - 1;
+		}
+
+		/* Move compacted holes to one large hole at end of memory */
+		end_block->start = initial_mem - cur_mem_left;
 		end_block->end = initial_mem - 1;
 		end_block->next = NULL;
 
-		if (prev_block) {
-		    prev_block->next = cur_block->next;
-		}
-		else {
-		    head = cur_block->next;
-		}
-
-		first_hole = cur_block;
+		cur_block = prev_block->next;
 	    }
-	    else {
-		if (cur_block->next) {
+	    else { /* If block is another hole */
+		if (cur_block->next) { /* Change addresses for next block */
 		    aff_block_size = cur_block->next->end - 
 				     cur_block->next->start + 1;
 		    cur_block->next->start = prev_block->end + 1;
@@ -445,11 +464,12 @@ void compactMemory() {
 
 		prev_block->next = cur_block->next;
 		free(cur_block);
-		compacted = 1;
+		cur_block = prev_block->next;
+		compacted = 1; /* Set flag showing that compact was success */
 	    }
 	}
-	else {
-	    if (compacted) {
+	else { /* If not a hole */
+	    if (compacted) { /* If the memory is being compacted */
 		aff_block_size = cur_block->end - cur_block->start + 1;
 		cur_block->start = prev_block->end + 1;
 		cur_block->end = cur_block->start + aff_block_size - 1;
@@ -460,17 +480,31 @@ void compactMemory() {
 	cur_block = cur_block->next;
     }
 
-    if (!compacted) {
-	if (end_block) {
-	    free(end_block);
+    if (!compacted) { /* If memory was unable to be compacted */
+	if (end_block) { /* If only one hole was found in memory */
+	    /* Restore the end_block to where it was initially, and fix the
+ 	     * address for both itself and the block next to it */
+	    end_block->start = recovery_start;
+	    end_block->end = recovery_end;
+	    end_block->next = recovery_next;
+
+	    aff_block_size = recovery_next->end - recovery_next->start + 1;
+	    recovery_next->start = recovery_end + 1;
+	    recovery_next->end = recovery_end + aff_block_size;
+
+	    if (recovery_prev) { /* If single hole wasn't head of memory */
+	        recovery_prev->next = end_block;
+	    }
+	    else {
+		head = end_block;
+	    }
 	}
 
 	fprintf(stderr, "Unable to find holes in memory to compact.\n");
 	fflush(stderr);
     }
-    else {
+    else { /* Set the last non-hole block in memory to point to single hole */
 	prev_block->next = end_block;
-	free(first_hole);
     }
 }
 
@@ -482,13 +516,13 @@ void printStatus() {
 
     memblock* cur_block = head;
 
-    if (!head) {
+    if (!head) { /* Empty memory */
 	printf("Addresses [0:%d] Unused\n", initial_mem - 1);
 	fflush(stdout);
     }
     else {
         while (cur_block) {
-            if (cur_block->name) {
+            if (cur_block->name) { /* If not a hole in memory */
                 printf("Addresses [%d:%d] Process %s\n",
                        cur_block->start, cur_block->end, cur_block->name);
                 fflush(stdout);
