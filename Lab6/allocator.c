@@ -173,7 +173,7 @@ void requestMemory() {
     memblock* best_block = NULL;
     memblock* best_prev_block = NULL;
     int biggest_hole = 0; /* Size of the biggest hole in memory */
-    int smallest_hole = 0; /* Size of the smallest hole in memory */
+    int smallest_hole = MAX; /* Size of the smallest hole in memory */
 
     if (!head) { /* First process being allocated */
 	new_mblock->start = 0;
@@ -199,19 +199,23 @@ void requestMemory() {
 
 	    if (cur_block->name == NULL) { /* If hole */
 	        if (cur_block_size >= cur_mem_req) { /* If new block fits */
-		    if ((cur_alloc_flag == 'B') && (cur_block_size <
-			 smallest_hole)) { /* Get smallest hole for best-fit */
-		        smallest_hole = cur_block_size;
-		     	best_block = cur_block;
-		    	best_prev_block = prev_block;
-			good_req = 1;
+		    if (cur_alloc_flag == 'B') {
+			if (cur_block_size < smallest_hole) { 
+			    /* Get smallest hole for best-fit */
+		            smallest_hole = cur_block_size;
+		     	    best_block = cur_block;
+		    	    best_prev_block = prev_block;
+			    good_req = 1;
+			}
 		    }
-		    else if ((cur_alloc_flag == 'W') && (cur_block_size >
-			 biggest_hole)) { /* Get biggest hole for worst-fit */
-		        biggest_hole = cur_block_size;
-		     	best_block = cur_block;
-		    	best_prev_block = prev_block;
-			good_req = 1;
+		    else if (cur_alloc_flag == 'W') {
+			if (cur_block_size > biggest_hole) { 
+			    /* Get biggest hole for worst-fit */
+		            biggest_hole = cur_block_size;
+		     	    best_block = cur_block;
+		    	    best_prev_block = prev_block;
+			    good_req = 1;
+			}
 		    }
 		    else { /* Save first good hole for first-fit */
 			best_block = cur_block;
@@ -451,7 +455,12 @@ void compactMemory() {
 		end_block->end = initial_mem - 1;
 		end_block->next = NULL;
 
-		cur_block = prev_block->next;
+		if (prev_block) {
+		    cur_block = prev_block->next;
+		}
+		else {
+		    cur_block = recovery_next;
+		}
 	    }
 	    else { /* If block is another hole */
 		if (cur_block->next) { /* Change addresses for next block */
@@ -476,8 +485,10 @@ void compactMemory() {
 	    }
 	}	
 
-	prev_block = cur_block;
-	cur_block = cur_block->next;
+	if (cur_block) {
+	    prev_block = cur_block;
+	    cur_block = cur_block->next;
+	}
     }
 
     if (!compacted) { /* If memory was unable to be compacted */
