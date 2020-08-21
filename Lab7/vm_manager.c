@@ -4,11 +4,14 @@
 
 #include "vm_manager.h"
 
-
+#define TLB_COLS 2
+#define TLB_PAGENO 0
+#define TLB_FRAMENO 1
 static int page_table[NUM_PAGES]; /* Buffer for page table holding frame #'s */
 static signed char physical_mem[NUM_FRAMES][FRAME_SIZE]; /* Physical Memory */
 static int frame_counter = 0; /* Frame counter for making page entries */
-
+static int tlb[NUM_TLB_ENTRIES][TLB_COLS]; /* TLB table */
+static int cur_entry = 0; /* TLB index of next entry to replace */
 
 void init_Manager() {
     /* Sets all the entries in the page table to -1, signifying that the
@@ -22,6 +25,11 @@ void init_Manager() {
     for (i = 0; i < NUM_PAGES; i++) {
 	page_table[i] = -1;
     }
+
+    for (i = 0; i < NUM_TLB_ENTRIES; i++) {
+        tlb[i][TLB_PAGENO] = -1;
+        tlb[i][TLB_FRAMENO] = -1;
+    }
 }
 
 int from_TLB(int pageno) {
@@ -29,7 +37,12 @@ int from_TLB(int pageno) {
      * the frame number for that page if it appears in the TLB or returns
      * -1 if it is not
      */
-
+    int i;
+    for (i = 0; i < NUM_TLB_ENTRIES; i++) {
+        if (tlb[i][TLB_PAGENO] == pageno) {
+            return tlb[i][TLB_FRAMENO];
+        }
+    }
     return -1;
 }
 
@@ -39,6 +52,15 @@ void update_TLB(int pageno, int frameno) {
      * (frameno) from the page table and updates the TLB using FIFO to
      * rearrange its contents
      */
+
+    /* insert entry's page/frame #, increment cur_entry */
+    tlb[cur_entry][TLB_PAGENO] = pageno;
+    tlb[cur_entry][TLB_FRAMENO] = frameno;
+    cur_entry++;
+    /* if used entries full, make cur_entry index 0 (FIFO) */
+    if (cur_entry >= NUM_TLB_ENTRIES) {
+        cur_entry = 0;
+    }
 }
 
 
