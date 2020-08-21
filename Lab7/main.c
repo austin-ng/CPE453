@@ -7,6 +7,8 @@
 
 int main(int argc, char* argv[]) {
     FILE* fin;
+    int i;
+    int phys_addr;
     char cur_addr[MAX_INPUT_LINE_LEN];
 
     /* Check for usage error */
@@ -22,8 +24,10 @@ int main(int argc, char* argv[]) {
     }
 
     while (fgets(cur_addr, MAX_INPUT_LINE_LEN, fin) != NULL) {
-	add_LAddress(cur_addr); 
+	phys_addr = get_PAddress(i);
     }
+
+    fclose(fin);
 
     return 0;
 }
