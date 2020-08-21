@@ -9,7 +9,7 @@ CFLAGS = -Wall
 LD = gcc
 LDFLAGS =
 
-MAIN = vm_manager
+MAIN = vmm
 SRCS = main.c vm_manager.c
 
 all: $(MAIN)
