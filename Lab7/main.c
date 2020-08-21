@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
 
     /* Check for usage error */
     if (argc != 2) {
-	fprintf(stderr, "usage: ./vm_manager <input text file>\n");
+	fprintf(stderr, "usage: ./vmm <input text file>\n");
 	exit(EXIT_FAILURE);
     }
 
