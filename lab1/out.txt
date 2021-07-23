@@ -1,0 +1,7 @@
+a.txt
+in.txt
+Makefile
+osh
+osh.c
+out.txt
+test.txt
