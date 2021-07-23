@@ -1,1 +1,2 @@
-# cpe453
+# CPE 453 - Operating Systems
+# Cal Poly SLO
